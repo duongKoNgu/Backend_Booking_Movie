@@ -93,7 +93,7 @@ spring:
             - AuthenticationFilter
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 2  
+                redis-rate-limiter.replenishRate: 2
                 redis-rate-limiter.burstCapacity: 4
                 key-resolver: "#{@userKeyResolver}"
 
