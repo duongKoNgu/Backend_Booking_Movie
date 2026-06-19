@@ -7,10 +7,12 @@ import com.movie.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -24,12 +26,11 @@ public class OrderServiceIml implements OrderService {
 
     @Override
     @Transactional
-    public String createOrder(OrderCreateRequest request) { // Đổi kiểu trả về thành String
-        // 1. Lấy thông tin lịch chiếu
+    public String createOrder(OrderCreateRequest request) {
         Showtime showtime = showtimeRepository.findById(request.getShowtimeId())
                 .orElseThrow(() -> new RuntimeException("Lịch chiếu không tồn tại"));
 
-        // 2. Kiểm tra ghế trùng
+        // Kiểm tra ghế trùng (Lưu ý: Bạn nên cấu hình ticketRepository chỉ lấy vé của đơn PAID hoặc PENDING, không lấy CANCELLED)
         List<Ticket> soldTickets = ticketRepository.findByShowtimeId(showtime.getId());
         List<String> soldSeatNumbers = soldTickets.stream()
                 .map(Ticket::getSeatNumber)
@@ -37,26 +38,25 @@ public class OrderServiceIml implements OrderService {
 
         for (String requestedSeat : request.getSeatNumbers()) {
             if (soldSeatNumbers.contains(requestedSeat)) {
-                throw new RuntimeException("Ghế " + requestedSeat + " đã có người đặt!");
+                throw new RuntimeException("Ghế " + requestedSeat + " đã có người đặt hoặc đang được giữ!");
             }
         }
 
-        // 3. Tạo Order tổng và sinh Order Code
         Order order = new Order();
         order.setUserId(request.getUserId());
         order.setShowtime(showtime);
-        order.setStatus("PAID");
 
-        // Tạo mã đơn hàng ngẫu nhiên (VD: 8 ký tự viết hoa)
+        // 1. CHỈ GIỮ GHẾ -> TRẠNG THÁI LÀ PENDING
+        order.setStatus("PENDING");
+
         String uniqueOrderCode = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        order.setOrderCode(uniqueOrderCode); // Lưu mã này vào DB
+        order.setOrderCode(uniqueOrderCode);
 
         double totalAmount = showtime.getBasePrice() * request.getSeatNumbers().size();
         order.setTotalAmount(totalAmount);
 
         Order savedOrder = orderRepository.save(order);
 
-        // 4. Tạo từng Ticket
         List<Ticket> newTickets = request.getSeatNumbers().stream().map(seatNum -> {
             Ticket ticket = new Ticket();
             ticket.setOrder(savedOrder);
@@ -68,9 +68,49 @@ public class OrderServiceIml implements OrderService {
 
         ticketRepository.saveAll(newTickets);
 
-        // Trả về mã đơn hàng cho Frontend
         return savedOrder.getOrderCode();
     }
+
+    // 2. HÀM MỚI: XÁC NHẬN THANH TOÁN THÀNH CÔNG
+    @Override
+    @Transactional
+    public void confirmPayment(String orderCode) {
+        Order order = orderRepository.findByOrderCode(orderCode)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng!"));
+
+        if ("PENDING".equals(order.getStatus())) {
+            order.setStatus("PAID");
+            orderRepository.save(order);
+        } else if ("CANCELLED".equals(order.getStatus())) {
+            throw new RuntimeException("Đơn hàng này đã quá thời gian thanh toán và bị hủy!");
+        }
+    }
+
+    // 3. JOB CHẠY NGẦM: TỰ ĐỘNG HỦY ĐƠN QUÁ 10 PHÚT
+    // Chạy mỗi 1 phút (60000 ms) một lần
+    @Scheduled(fixedRate = 60000)
+    @Transactional
+    public void autoCancelExpiredOrders() {
+        // Lấy mốc thời gian 10 phút trước
+        LocalDateTime tenMinutesAgo = LocalDateTime.now().minusMinutes(10);
+
+        // Tìm các đơn PENDING tạo trước mốc 10 phút
+        List<Order> expiredOrders = orderRepository.findByStatusAndCreatedAtBefore("PENDING", tenMinutesAgo);
+
+        for (Order order : expiredOrders) {
+            order.setStatus("CANCELLED");
+
+            // QUAN TRỌNG: Xóa các vé (Ticket) đã tạo để giải phóng ghế cho người khác mua
+            ticketRepository.deleteAll(order.getTickets());
+            order.getTickets().clear();
+        }
+
+        if (!expiredOrders.isEmpty()) {
+            orderRepository.saveAll(expiredOrders);
+            System.out.println("[SYSTEM] Đã tự động hủy " + expiredOrders.size() + " đơn hàng hết hạn giữ chỗ.");
+        }
+    }
+
     @Override
     public void cancelOrder(Long id) {
         Order order = getById(id);

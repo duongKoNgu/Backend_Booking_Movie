@@ -3,6 +3,7 @@ package com.movie.entity;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDate;
 import java.util.List;
 
 @Entity
@@ -36,7 +37,6 @@ public class Movie {
     @OneToMany(mappedBy = "movie", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MovieActor> movieActors;
 
-    // THÊM MỚI ĐOẠN NÀY: Liên kết tới bảng trailers
     @OneToMany(mappedBy = "movie", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Trailer> trailers;
 
@@ -45,4 +45,8 @@ public class Movie {
 
     @Column(length = 20)
     private String status;
+
+    // THÊM TRƯỜNG NÀY: Ngày kết thúc chiếu
+    @Column(name = "end_date")
+    private LocalDate endDate;
 }

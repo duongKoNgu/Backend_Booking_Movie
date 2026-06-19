@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,4 +22,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @Query(value = "SELECT * FROM orders o WHERE o.order_code = :orderCode", nativeQuery = true)
     Optional<Order> findByOrderCode(@Param("orderCode") String orderCode);
+
+    @Query(value = "SELECT * FROM orders WHERE status = :status AND created_at < :time", nativeQuery = true)
+    List<Order> findByStatusAndCreatedAtBefore(
+            @Param("status") String status,
+            @Param("time") LocalDateTime time
+    );
 }

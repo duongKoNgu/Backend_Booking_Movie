@@ -5,6 +5,7 @@ import com.movie.auth.entity.User;
 import com.movie.auth.entity.dto.LoginDto;
 import com.movie.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 import java.util.Optional;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -30,6 +32,7 @@ public class AuthController {
             return ResponseEntity.badRequest().body("Email đã tồn tại");
         }
 
+        user.setRole("USER");
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         User savedUser = userRepository.save(user);
         return ResponseEntity.ok(savedUser);

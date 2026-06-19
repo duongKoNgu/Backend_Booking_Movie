@@ -49,7 +49,8 @@ public class ShowtimeController {
     // ─── 4. Tạo suất chiếu mới ───
     @PostMapping("/create")
     public ResponseEntity<Showtime> createShowtime(@RequestBody ShowtimeDtos.ShowtimeCreateRequest request) {
-        return ResponseEntity.ok(showtimeService.createShowtime(request));
+        Showtime newShowtime = showtimeService.createShowtime(request);
+        return ResponseEntity.ok(newShowtime);
     }
 
     // ─── 5. Cập nhật suất chiếu ───

@@ -5,31 +5,42 @@ spring:
   application:
     name: api-gateway
 
+  # Cấu hình kết nối Redis chuẩn của Spring Boot
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
   cloud:
     gateway:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOrigins:
-              - "http://localhost:3000"
-              - "http://localhost:5173"
-              - "http://localhost:8080" # Thêm chính cổng Gateway để Swagger tự gọi nó
+            allowedOriginPatterns: "*"
             allowedMethods: [ GET, POST, PUT, DELETE, OPTIONS ]
             allowedHeaders:
-              - "Authorization" # Chỉ định rõ Authorization thay vì chỉ dùng "*"
+              - "Authorization"
               - "Content-Type"
               - "X-Gateway-Source"
             allowCredentials: true
             maxAge: 3600
 
       routes:
-        # --- CÁC ROUTE KHÔNG YÊU CẦU TOKEN (SWAGGER & AUTH) ---
+        # =================================================================
+        # 1. CÁC ROUTE KHÔNG YÊU CẦU TOKEN (SWAGGER)
+        # (Cũng được bảo vệ chống spam 5-10 request/giây)
+        # =================================================================
         - id: openapi-movie
           uri: lb://movie-service
           predicates:
             - Path=/api/movie/api-docs
           filters:
             - RewritePath=/api/movie/(?<segment>.*), /$\{segment}
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@userKeyResolver}"
 
         - id: openapi-search
           uri: lb://search-client-service
@@ -37,6 +48,11 @@ spring:
             - Path=/api/search/api-docs
           filters:
             - RewritePath=/api/search/(?<segment>.*), /$\{segment}
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@userKeyResolver}"
 
         - id: openapi-auth
           uri: lb://auth-service
@@ -44,25 +60,58 @@ spring:
             - Path=/api/auth/api-docs
           filters:
             - RewritePath=/api/auth/(?<segment>.*), /$\{segment}
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@userKeyResolver}"
 
+        # =================================================================
+        # 2. ROUTE AUTH
+        # =================================================================
         - id: auth-service
           uri: lb://auth-service
           predicates:
             - Path=/api/auth/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@userKeyResolver}"
 
-        # --- CÁC ROUTE YÊU CẦU TOKEN (CÓ THÊM AuthenticationFilter) ---
+        # =================================================================
+        # 3. CÁC ROUTE YÊU CẦU TOKEN
+        # =================================================================
+
+        - id: order-create-service
+          uri: lb://movie-service
+          predicates:
+            - Path=/api/orders/create
+          filters:
+            - AddRequestHeader=X-Gateway-Source, api-gateway
+            - AuthenticationFilter
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 2  
+                redis-rate-limiter.burstCapacity: 4
+                key-resolver: "#{@userKeyResolver}"
+
+        # Route Tìm kiếm AI
         - id: search-service
           uri: lb://search-client-service
           predicates:
             - Path=/api/search/**
           filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
             - AddRequestHeader=X-Gateway-Source, api-gateway
             - AuthenticationFilter
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@userKeyResolver}"
 
+        # Route Phim liên quan
         - id: related-service
           uri: lb://related-service
           predicates:
@@ -70,7 +119,13 @@ spring:
           filters:
             - AddRequestHeader=X-Gateway-Source, api-gateway
             - AuthenticationFilter
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@userKeyResolver}"
 
+        # Route tổng cho Movie Service (Lấy danh sách phim, suất chiếu...)
         - id: movie-service
           uri: lb://movie-service
           predicates:
@@ -78,6 +133,11 @@ spring:
           filters:
             - AddRequestHeader=X-Gateway-Source, api-gateway
             - AuthenticationFilter
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@userKeyResolver}"
 
       default-filters:
         - name: Retry
@@ -125,8 +185,3 @@ logging:
   level:
     org.springframework.cloud.gateway: INFO
     com.movie: DEBUG
-
-data:
-  redis:
-    host: localhost
-    port: 6379

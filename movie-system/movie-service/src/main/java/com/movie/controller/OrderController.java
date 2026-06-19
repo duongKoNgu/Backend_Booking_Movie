@@ -86,4 +86,14 @@ public class OrderController {
 
         return ResponseEntity.ok(orderQRDto);
     }
+
+    @PostMapping("/{orderCode}/confirm")
+    public ResponseEntity<String> confirmPayment(@PathVariable String orderCode) {
+        try {
+            orderService.confirmPayment(orderCode);
+            return ResponseEntity.ok("Thanh toán thành công. Đã xuất vé!");
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

@@ -14,4 +14,6 @@ public interface OrderService {
     Order getById(Long id);
 
     List<String> getBookedSeats(Long showtimeId);
+
+    void confirmPayment(String orderCode);
 }

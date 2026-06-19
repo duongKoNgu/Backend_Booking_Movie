@@ -92,6 +92,9 @@ public class ShowtimeServiceImpl implements ShowtimeService {
         Room room = roomRepository.findById(request.getRoomId())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng chiếu"));
 
+        if (movie.getEndDate() != null && request.getShowDate().isAfter(movie.getEndDate())) {
+            throw new RuntimeException("Lỗi: Phim này chỉ được phép chiếu đến ngày " + movie.getEndDate());
+        }
         Showtime showtime = new Showtime();
         mapRequestToShowtime(request, showtime, movie, room);
 

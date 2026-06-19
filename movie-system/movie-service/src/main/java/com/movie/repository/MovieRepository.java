@@ -24,4 +24,7 @@ public interface MovieRepository extends JpaRepository<Movie, Long> {
 
     @Query(value = "SELECT * FROM movies WHERE title IN (:titles)", nativeQuery = true)
     List<Movie> findByTitleIn(@Param("titles") List<String> titles);
+
+    @Query("SELECT m FROM Movie m WHERE m.status = :status AND (m.endDate IS NULL OR m.endDate >= CURRENT_DATE)")
+    List<Movie> findShowingAndValidMovies(@Param("status") String status);
 }

@@ -14,4 +14,6 @@ public interface MovieService {
 
     List<Movie> getMoviesByTitles(List<String> titles);
     MovieDtos.MovieDetailResponse createMovieWithPoster(Movie movie, MultipartFile file);
+
+    void updateMovie(Long id, Movie movie, MultipartFile file);
 }

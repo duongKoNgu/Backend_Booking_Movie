@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -45,6 +46,10 @@ public class MovieServiceImpl implements MovieService {
     @Override
     @Transactional(readOnly = true)
     public List<Movie> getMoviesByStatus(String status) {
+        // Nếu là phim đang chiếu thì dùng hàm lọc ngày hạn
+        if ("showing".equalsIgnoreCase(status)) {
+            return movieRepository.findShowingAndValidMovies(status);
+        }
         return movieRepository.findByStatus(status);
     }
 
@@ -122,4 +127,48 @@ public class MovieServiceImpl implements MovieService {
             throw new RuntimeException("Không thể tạo mới phim: " + e.getMessage(), e);
         }
     }
+
+    @Override
+    @Transactional
+    public void updateMovie(Long id, Movie requestMovie, MultipartFile file) {
+        // 1. Tìm phim cũ trong Database
+        Movie existingMovie = movieRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy phim với ID: " + id));
+
+        // 2. Cập nhật các trường thông tin cơ bản
+        existingMovie.setTitle(requestMovie.getTitle());
+        existingMovie.setGenre(requestMovie.getGenre());
+        existingMovie.setReleaseYear(requestMovie.getReleaseYear());
+        existingMovie.setDirector(requestMovie.getDirector());
+        existingMovie.setDuration(requestMovie.getDuration());
+        existingMovie.setDescription(requestMovie.getDescription());
+        existingMovie.setEndDate(requestMovie.getEndDate()); // Nhớ update cả ngày kết thúc
+
+        // 3. Xử lý ảnh Poster (Chỉ update nếu Admin có chọn file mới)
+        if (file != null && !file.isEmpty()) {
+            try {
+                String newPosterUrl = fileService.uploadPoster(file);
+                existingMovie.setPosterUrl(newPosterUrl);
+            } catch (Exception e) {
+                throw new RuntimeException("Lỗi khi upload ảnh mới: " + e.getMessage());
+            }
+        }
+
+        // 4. Xử lý Trailer (Nếu Frontend có gửi danh sách trailer mới)
+        if (requestMovie.getTrailers() != null && !requestMovie.getTrailers().isEmpty()) {
+            // Xóa danh sách trailer cũ
+            existingMovie.getTrailers().clear();
+
+            // Thêm trailer mới vào và trỏ ngược lại Movie hiện tại (Quan trọng để lưu khóa ngoại)
+            for (Trailer trailer : requestMovie.getTrailers()) {
+                trailer.setMovie(existingMovie);
+                existingMovie.getTrailers().add(trailer);
+            }
+        }
+
+        // 5. Lưu lại xuống Database
+        movieRepository.save(existingMovie);
+    }
+
+
 }

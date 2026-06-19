@@ -18,7 +18,7 @@ public class SearchDtos {
     @Data @AllArgsConstructor
     public static class AiSearchRequest {
         private String query;
-        private int    top_k;  // snake_case theo Python API
+        private int    top_k;
     }
 
     // ── Response từ Python AI ─────────────────────────────────────────────

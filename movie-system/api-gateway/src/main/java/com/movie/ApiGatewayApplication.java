@@ -4,6 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,18 +20,29 @@ public class ApiGatewayApplication {
         SpringApplication.run(ApiGatewayApplication.class, args);
     }
 
-    // Bean này chỉ cho Spring Gateway biết cách phân biệt các user để rate limit (Dựa vào IP)
+    // CHỈ GIỮ LẠI DUY NHẤT BEAN NÀY
     @Bean
-    public KeyResolver ipKeyResolver() {
-        return exchange -> Mono.just(
-                Objects.requireNonNull(exchange.getRequest().getRemoteAddress()).getAddress().getHostAddress()
-        );
+    public KeyResolver userKeyResolver() {
+        return exchange -> {
+            // Lấy token từ header
+            String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+
+            // 1. Nếu đã đăng nhập (Có Token), dùng chính Token làm chìa khóa để phân biệt User
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                return Mono.just(authHeader);
+            }
+
+            // 2. Nếu chưa đăng nhập (Khách vãng lai), tự động fallback về chặn theo địa chỉ IP thiết bị
+            return Mono.just(
+                    Objects.requireNonNull(exchange.getRequest().getRemoteAddress()).getAddress().getHostAddress()
+            );
+        };
     }
 }
 
 @RestController
 class FallbackController {
-    // API Gateway dùng WebFlux nên dùng Mono để trả về là chuẩn Reactive nhất
+
     @RequestMapping("/fallback")
     public Mono<ResponseEntity<Map<String, String>>> fallback() {
         return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)

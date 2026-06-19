@@ -122,4 +122,15 @@ public class MovieController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> updateMovie(
+            @PathVariable Long id,
+            @RequestPart("movie") Movie movie,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+        movieService.updateMovie(id, movie, file);
+        return ResponseEntity.ok("Cập nhật thành công");
+    }
+
+
+
 }
